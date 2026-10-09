@@ -1,6 +1,6 @@
 package com.example.monthlyexpensetracker;
 
-import android.app.Activity;
+import androidx.fragment.app.FragmentActivity;
 import android.content.Intent;
 import android.content.Context;
 import android.os.Bundle;
@@ -18,7 +18,7 @@ import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
 import java.util.concurrent.Executor;
 
-public class MainActivity extends Activity {
+public class MainActivity extends FragmentActivity {
     private WebView webView;
     private boolean unlocked = false;
     private boolean promptShowing = false;
