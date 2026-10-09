@@ -1,6 +1,6 @@
 # Monthly Expense Tracker — GitHub Actions project
 
-A dark, compact, offline-first Android expense tracker. It stores records locally in the app's WebView storage and includes monthly budget/expenses/remaining cards, add/edit/delete, search/category filter, CSV import/export, JSON backup, and monthly PDF printing/export through Android's print service. The app uses Android biometric authentication with device screen-lock credential fallback where supported. The interface uses text-only outlined controls with rounded corners; the launcher icon is a dark minimalist rupee/receipt design.
+A dark, compact, offline-first Android expense tracker. It stores records locally in the app's WebView storage and includes monthly budget/expenses/remaining cards, add/edit/delete, search/category filter, CSV import/export, JSON backup, and monthly PDF printing/export through Android's print service. The app uses a separate 4–12 digit PIN prompt, stores a SHA-256 PIN hash in app-private preferences, and relocks when the app returns from the background. The interface uses text-only outlined controls with rounded corners; the launcher icon is a dark minimalist rupee/receipt design.
 
 ## Build APK without Android Studio
 1. Create/open your GitHub repository.
@@ -18,6 +18,6 @@ A dark, compact, offline-first Android expense tracker. It stores records locall
 ## Data and security notes
 - Expense and budget records are stored locally using WebView local storage. They are not synced to Google Sheets or any server.
 - Use **Backup JSON** regularly. Uninstalling/clearing app data can delete local records.
-- Authentication uses biometric/device credential prompt where supported; it does not create a separate app-specific PIN. Set a secure device screen lock in Android Settings.
+- On first launch, create and confirm a 4–12 digit PIN. The app asks for the PIN again when returning from the background. The PIN gate is an app-level deterrent; it does not encrypt the WebView expense database. Back up data before replacing or uninstalling the app.
 - PDF export opens Android's print dialog; choose **Save as PDF** to save a PDF locally.
 - This project has not been independently security-audited. Avoid storing highly sensitive information until you have tested it on your device.

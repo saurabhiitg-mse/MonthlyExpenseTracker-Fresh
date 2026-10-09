@@ -1,36 +1,40 @@
 package com.example.monthlyexpensetracker;
 
-import androidx.fragment.app.FragmentActivity;
-import android.content.Intent;
+import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.os.CancellationSignal;
 import android.print.PrintManager;
 import android.print.PrintAttributes;
-import android.provider.Settings;
+import android.text.InputType;
+import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.Toast;
-import androidx.biometric.BiometricManager;
-import androidx.biometric.BiometricPrompt;
-import androidx.core.content.ContextCompat;
-import java.util.concurrent.Executor;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
-public class MainActivity extends FragmentActivity {
+public class MainActivity extends Activity {
     private WebView webView;
     private boolean unlocked = false;
     private boolean promptShowing = false;
     private boolean shouldRelock = false;
     private boolean firstResume = true;
-    private final Executor executor = command -> runOnUiThread(command);
+    private SharedPreferences lockPrefs;
+    private AlertDialog pinDialog;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(0xFF101411);
         getWindow().setNavigationBarColor(0xFF101411);
+        lockPrefs = getSharedPreferences("app_lock", MODE_PRIVATE);
         webView = new WebView(this);
         webView.setBackgroundColor(0xFF101411);
         webView.getSettings().setJavaScriptEnabled(true);
@@ -40,48 +44,82 @@ public class MainActivity extends FragmentActivity {
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient());
         webView.addJavascriptInterface(new AppBridge(), "ExpenseApp");
+        webView.setVisibility(View.INVISIBLE);
         setContentView(webView);
         webView.loadUrl("file:///android_asset/index.html");
-        authenticate();
+        showPinDialog();
     }
 
-    private void authenticate() {
+    private void showPinDialog() {
         if (promptShowing || isFinishing()) return;
-        BiometricManager manager = BiometricManager.from(this);
-        int authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
-        int result = manager.canAuthenticate(authenticators);
-        if (result != BiometricManager.BIOMETRIC_SUCCESS) {
-            Toast.makeText(this, "Set up a fingerprint or screen lock in Android Settings to protect this app.", Toast.LENGTH_LONG).show();
-            try { startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS)); } catch (Exception ignored) {}
-            // Do not silently claim biometric protection is active. Permit use if the device has no supported lock.
-            unlocked = true;
-            shouldRelock = false;
-            return;
-        }
         promptShowing = true;
-        BiometricPrompt prompt = new BiometricPrompt(this, executor, new BiometricPrompt.AuthenticationCallback() {
-            @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
-                promptShowing = false; unlocked = true; shouldRelock = false;
+        String savedHash = lockPrefs.getString("pin_hash", null);
+        boolean setup = savedHash == null;
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int)(20 * getResources().getDisplayMetrics().density);
+        layout.setPadding(pad, pad / 2, pad, 0);
+        EditText pin = new EditText(this);
+        pin.setSingleLine(true);
+        pin.setHint(setup ? "Create a 4–12 digit PIN" : "Enter your PIN");
+        pin.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        layout.addView(pin);
+        EditText confirm = null;
+        if (setup) {
+            confirm = new EditText(this);
+            confirm.setSingleLine(true);
+            confirm.setHint("Confirm PIN");
+            confirm.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+            layout.addView(confirm);
+        }
+        final EditText confirmField = confirm;
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(setup ? "Create app PIN" : "Unlock Monthly Expense Tracker")
+                .setMessage(setup ? "Choose a PIN to protect your expenses." : "Enter your PIN to continue.")
+                .setView(layout)
+                .setCancelable(false)
+                .setPositiveButton(setup ? "Save PIN" : "Unlock", null)
+                .create();
+        pinDialog = dialog;
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String entered = pin.getText().toString();
+            if (entered.length() < 4 || entered.length() > 12) {
+                pin.setError("PIN must contain 4–12 digits"); return;
             }
-            @Override public void onAuthenticationFailed() {
-                Toast.makeText(MainActivity.this, "Fingerprint not recognized. Try again.", Toast.LENGTH_SHORT).show();
+            if (setup) {
+                String repeated = confirmField.getText().toString();
+                if (!entered.equals(repeated)) { confirmField.setError("PINs do not match"); return; }
+                lockPrefs.edit().putString("pin_hash", sha256(entered)).apply();
+                unlockApp();
+            } else if (constantTimeEquals(savedHash, sha256(entered))) {
+                unlockApp();
+            } else {
+                pin.setText(""); pin.setError("Incorrect PIN");
             }
-            @Override public void onAuthenticationError(int errorCode, CharSequence errString) {
-                promptShowing = false;
-                if (errorCode == BiometricPrompt.ERROR_USER_CANCELED || errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON || errorCode == BiometricPrompt.ERROR_CANCELED) {
-                    unlocked = false; finish();
-                } else {
-                    Toast.makeText(MainActivity.this, "Authentication required to open your expenses.", Toast.LENGTH_LONG).show();
-                    unlocked = false; finish();
-                }
-            }
-        });
-        BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Unlock Monthly Expense Tracker")
-                .setSubtitle("Use your fingerprint or your phone's screen lock")
-                .setAllowedAuthenticators(authenticators)
-                .build();
-        prompt.authenticate(info);
+        }));
+        dialog.setOnDismissListener(ignored -> promptShowing = false);
+        dialog.show();
+    }
+
+    private void unlockApp() {
+        unlocked = true;
+        shouldRelock = false;
+        promptShowing = false;
+        if (webView != null) webView.setVisibility(View.VISIBLE);
+        if (pinDialog != null && pinDialog.isShowing()) pinDialog.dismiss();
+    }
+
+    private String sha256(String value) {
+        try {
+            byte[] bytes = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder out = new StringBuilder();
+            for (byte b : bytes) out.append(String.format(java.util.Locale.US, "%02x", b & 0xff));
+            return out.toString();
+        } catch (Exception e) { throw new IllegalStateException("SHA-256 unavailable", e); }
+    }
+
+    private boolean constantTimeEquals(String a, String b) {
+        return a != null && MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8), b.getBytes(StandardCharsets.UTF_8));
     }
 
     @Override protected void onPause() {
@@ -91,7 +129,7 @@ public class MainActivity extends FragmentActivity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (!firstResume && shouldRelock && !promptShowing) { unlocked = false; authenticate(); }
+        if (!firstResume && shouldRelock && !promptShowing) { unlocked = false; if (webView != null) webView.setVisibility(View.INVISIBLE); showPinDialog(); }
         firstResume = false;
     }
 
