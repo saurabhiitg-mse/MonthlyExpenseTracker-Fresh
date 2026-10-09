@@ -2,6 +2,9 @@ package com.example.monthlyexpensetracker;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.Context;
+import android.print.PrintManager;
+import android.print.PrintAttributes;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -39,6 +42,30 @@ public class MainActivity extends Activity {
                 send.putExtra(Intent.EXTRA_SUBJECT, "Monthly Expense Tracker export.csv");
                 send.putExtra(Intent.EXTRA_TEXT, csv);
                 startActivity(Intent.createChooser(send, "Export expense sheet"));
+            });
+        }
+
+        @JavascriptInterface
+        public void exportPdf(String html, String filename) {
+            runOnUiThread(() -> {
+                WebView printView = new WebView(MainActivity.this);
+                printView.getSettings().setJavaScriptEnabled(false);
+                printView.getSettings().setAllowFileAccess(false);
+                printView.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public void onPageFinished(WebView view, String url) {
+                        PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                        String jobName = filename == null ? "Monthly expenses" : filename.replace(".pdf", "");
+                        android.print.PrintDocumentAdapter adapter = view.createPrintDocumentAdapter(jobName);
+                        PrintAttributes attributes = new PrintAttributes.Builder()
+                                .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                                .setResolution(new PrintAttributes.Resolution("pdf", "pdf", 300, 300))
+                                .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                                .build();
+                        printManager.print(jobName, adapter, attributes);
+                    }
+                });
+                printView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
             });
         }
 

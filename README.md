@@ -23,3 +23,11 @@ The GitHub runner needs internet to download build dependencies while compiling.
 - `app/src/main/java/.../MainActivity.java` WebView host and CSV share bridge
 - `app/src/main/assets/index.html` offline interface and expense-sheet logic
 - `.github/workflows/build-apk.yml` GitHub Actions build workflow
+
+## Updates in this version
+
+- Added **Download Monthly PDF**. It exports all expenses for the month selected in the Month field, including totals and category summary, through Android's print-to-PDF interface. The report is generated on-device.
+- Disabled Android automatic app-data backup.
+- Explicitly disabled debugging in the release build configuration.
+
+Security note: these changes do not yet implement app PIN/biometric lock or encryption of the expense records stored in WebView localStorage. Existing localStorage records are not automatically encrypted by this update. Exported PDFs and CSV files are unencrypted and should be stored carefully.

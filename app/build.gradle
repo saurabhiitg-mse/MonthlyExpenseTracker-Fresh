@@ -6,6 +6,13 @@ android {
     namespace 'com.example.monthlyexpensetracker'
     compileSdk 35
 
+    buildTypes {
+        release {
+            debuggable false
+            minifyEnabled false
+        }
+    }
+
     defaultConfig {
         applicationId 'com.example.monthlyexpensetracker'
         minSdk 23
